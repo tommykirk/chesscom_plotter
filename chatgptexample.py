@@ -5,6 +5,7 @@ import sys
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
+
 def main():
     create_chart()
     # now = datetime.now().replace(month=2)
@@ -13,10 +14,13 @@ def main():
     #     print("now plus {} days is {}".format(i, now + timedelta(i)))
     #     print(get_end_of_month(now + timedelta(i)))
 
+
 def get_end_of_month(date: datetime):
     return (date + relativedelta(months=1)).replace(day=1) - timedelta(1)
 
+
 def create_chart():
+    # case sensistive
     username = '5tk18'
     url = f'https://api.chess.com/pub/player/{username}/games/archives'
 
@@ -34,7 +38,8 @@ def create_chart():
     end_of_month = get_end_of_month(lookback_date)
     archive_urls = response.json()['archives']
     archive_urls = [url for url in archive_urls if
-                    get_end_of_month(datetime.strptime(''.join(url.split('/')[-2:]), '%Y%m').date()) >= lookback_date.date()]
+                    get_end_of_month(
+                        datetime.strptime(''.join(url.split('/')[-2:]), '%Y%m').date()) >= lookback_date.date()]
 
     # Make a GET request to the API to get the games from the last 3 months
     elo_history = []
@@ -43,7 +48,8 @@ def create_chart():
         logger.info("Requesting games archive at {}".format(archive_url))
         response = requests.get(archive_url, headers={"User-Agent": "5tk18"})
         for game in response.json()['games']:
-            if game['rules'] == 'chess' and game['time_class'] == 'blitz' and datetime.fromtimestamp(game['end_time']).date() >= lookback_date.date():
+            if game['rules'] == 'chess' and game['time_class'] == 'blitz' and datetime.fromtimestamp(
+                    game['end_time']).date() >= lookback_date.date():
                 white_elo = game['white']['rating']
                 black_elo = game['black']['rating']
                 if username == game['white']['username']:
@@ -64,6 +70,7 @@ def create_chart():
     plt.ylabel('ELO')
     plt.title(f'Blitz ELO history for {username} (last {days} days)')
     plt.show()
+
 
 if __name__ == '__main__':
     main()
