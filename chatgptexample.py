@@ -2,8 +2,10 @@ import requests
 import matplotlib.pyplot as plt
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
+
+from chesscom_cache import GameCache
 
 
 def main():
@@ -19,12 +21,22 @@ def get_end_of_month(date: datetime):
     return (date + relativedelta(months=1)).replace(day=1) - timedelta(1)
 
 
+def get_date_from_archive_url(url: str):
+    return datetime.strptime(''.join(url.split('/')[-2:]), '%Y%m').date()
+
+
+def is_current_month(date_1: date):
+    return (datetime.now().replace(day=1) - timedelta(1)).date() < date_1
+
+
 def create_chart():
+    db = GameCache("chesscom_cache.db")
+
     # case sensistive
     username = '5tk18'
     url = f'https://api.chess.com/pub/player/{username}/games/archives'
 
-    days = 180
+    days = 100
 
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.getLogger().setLevel(logging.INFO)
@@ -38,16 +50,21 @@ def create_chart():
     end_of_month = get_end_of_month(lookback_date)
     archive_urls = response.json()['archives']
     archive_urls = [url for url in archive_urls if
-                    get_end_of_month(
-                        datetime.strptime(''.join(url.split('/')[-2:]), '%Y%m').date()) >= lookback_date.date()]
+                    get_end_of_month(get_date_from_archive_url(url)) >= lookback_date.date()]
 
     # Make a GET request to the API to get the games from the last 3 months
     elo_history = []
     game_ids = []
     for archive_url in archive_urls:
-        logger.info("Requesting games archive at {}".format(archive_url))
-        response = requests.get(archive_url, headers={"User-Agent": "5tk18"})
-        for game in response.json()['games']:
+        start_of_month = get_date_from_archive_url(archive_url)
+        response_json = db.get(username, start_of_month)
+        if response_json is not None and not is_current_month(start_of_month):
+            logger.info("Found game archive in db for {}".format(archive_url))
+        else:
+            logger.info("Requesting games archive at {}".format(archive_url))
+            response_json = requests.get(archive_url, headers={"User-Agent": "5tk18"}).json()
+            db.set(username, start_of_month, response_json)
+        for game in response_json['games']:
             if game['rules'] == 'chess' and game['time_class'] == 'blitz' and datetime.fromtimestamp(
                     game['end_time']).date() >= lookback_date.date():
                 white_elo = game['white']['rating']
