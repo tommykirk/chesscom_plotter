@@ -97,9 +97,13 @@ def create_chart(games_jsons: List[Dict[str, Any]], start: time):
     plt.show()
 
 
-# case sensistive
-username = '5tk18'
-days = 100
+# TODO: idea - make a ui for easy querying Messages content (backed by sqlite db) by time range
+# first input date range -> see aggregate stats of largest conversations in that date range
+# -> be able to drill down into individual conversations
+
+# case sensitive
+username = 'printerpaper'
+days = 2
 USE_DB = True
 MULTI_THREADED = False
 
