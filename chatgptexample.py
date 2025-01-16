@@ -12,7 +12,8 @@ from chesscom_cache import GameCache
 
 
 def main():
-    some_generic_method()
+    download_games(7, '5tk18')
+    print_games_played(7, '5tk18')
     # create_chart()
     # now = datetime.now().replace(month=2)
     # # print(get_end_of_month(now))
@@ -20,25 +21,18 @@ def main():
     #     print("now plus {} days is {}".format(i, now + timedelta(i)))
     #     print(get_end_of_month(now + timedelta(i)))
 
-def some_generic_method():
+
+def download_games(duration: int, username: str):
     db = GameCache("chesscom_cache.db")
 
     # case sensistive
-    username = 'printerpaper'
     url = f'https://api.chess.com/pub/player/{username}/games/archives'
-
-    days = 7
-
-    logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
-    logging.getLogger().setLevel(logging.INFO)
-    logger = logging.getLogger()
 
     # Make a GET request to the API to get a list of archives for the user
     response = requests.get(url, headers={"User-Agent": "5tk18"})
 
     # Get the URL of the archive for 3 months ago
-    lookback_date = datetime.now() - timedelta(days=days)
-    end_of_month = get_end_of_month(lookback_date)
+    lookback_date = datetime.now() - timedelta(days=duration)
     archive_urls = response.json()['archives']
     archive_urls = [url for url in archive_urls if
                     get_end_of_month(get_date_from_archive_url(url)) >= lookback_date.date()]
@@ -52,29 +46,65 @@ def some_generic_method():
             logger.info("Requesting games archive at {}".format(archive_url))
             response_json = requests.get(archive_url, headers={"User-Agent": "5tk18"}).json()
             db.set(username, start_of_month, response_json)
+
+
+def print_games_played(days: int, username: str):
+    db = GameCache("chesscom_cache.db")
+    url = f'https://api.chess.com/pub/player/{username}/games/archives'
+
+    # Make a GET request to the API to get a list of archives for the user
+    response = requests.get(url, headers={"User-Agent": "5tk18"})
+
+    # Get the URL of the archive for 3 months ago
+    lookback_date = datetime.now() - timedelta(days=days)
+    archive_urls = response.json()['archives']
+    archive_urls = [url for url in archive_urls if
+                    get_end_of_month(get_date_from_archive_url(url)) >= lookback_date.date()]
+
+    for archive_url in archive_urls:
+        start_of_month = get_date_from_archive_url(archive_url)
+        response_json = db.get(username, start_of_month)
         total_seconds = 0
         total_games = 0
         for game in response_json['games']:
             # and game['time_class'] == 'blitz'
             if game['rules'] == 'chess' and datetime.fromtimestamp(game['end_time']).date() >= lookback_date.date():
                 try:
-                    game_duration = get_game_duration(game['pgn'])
+                    pgn = chess.pgn.read_game(io.StringIO(game['pgn']))
+                    game_duration = get_game_duration(pgn)
                     total_seconds += game_duration
                     total_games += 1
-                    print(f"Spent {game_duration} seconds playing this game")
+                    print(f"Spent {game_duration} seconds playing this game at {get_game_start_time(pgn)}")
                 except Exception as e:
                     logger.error(e)
                     print(e)
                     print("tommy error: " + game['url'])
-        print(f"Spent a total of {total_seconds} seconds playing {total_games} games")
+        print(f"Spent a total of {format_seconds(total_seconds)} seconds playing {total_games} games in the last {days} days")
 
 
+def format_seconds(seconds: int) -> str:
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    parts = []
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0 or hours > 0:  # Include minutes if hours are present
+        parts.append(f"{minutes}m")
+    parts.append(f"{seconds}s")
+    return " ".join(parts)
 
-def get_game_duration(pgn_str: str):
-    pgn = chess.pgn.read_game(io.StringIO(pgn_str))
+def get_game_start_time(pgn: chess.pgn.GameT):
     t1 = datetime.strptime(pgn.headers.get('UTCDate') + pgn.headers.get('StartTime'), "%Y.%m.%d%H:%M:%S")
+    return t1
+
+
+def get_game_end_time(pgn: chess.pgn.GameT):
     t2 = datetime.strptime(pgn.headers.get('EndDate') + pgn.headers.get('EndTime'), "%Y.%m.%d%H:%M:%S")
-    t_delta = t2 - t1
+    return t2
+
+
+def get_game_duration(pgn: chess.pgn.GameT):
+    t_delta = get_game_end_time(pgn) - get_game_start_time(pgn)
     return t_delta.seconds
 
 
@@ -151,4 +181,7 @@ def create_chart():
 
 
 if __name__ == '__main__':
+    logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
+    logging.getLogger().setLevel(logging.INFO)
+    logger = logging.getLogger()
     main()
