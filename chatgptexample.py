@@ -12,8 +12,9 @@ from chesscom_cache import GameCache
 
 
 def main():
-    download_games(7, '5tk18')
-    print_games_played(7, '5tk18')
+    username = '5tk18'
+    download_games(30, username)
+    print_games_played(7, username)
     # create_chart()
     # now = datetime.now().replace(month=2)
     # # print(get_end_of_month(now))
@@ -66,15 +67,23 @@ def print_games_played(days: int, username: str):
         response_json = db.get(username, start_of_month)
         total_seconds = 0
         total_games = 0
+        last_game_end_time = None
         for game in response_json['games']:
             # and game['time_class'] == 'blitz'
+            # print(datetime.fromtimestamp(game['end_time']).date(), lookback_date.date())
             if game['rules'] == 'chess' and datetime.fromtimestamp(game['end_time']).date() >= lookback_date.date():
                 try:
                     pgn = chess.pgn.read_game(io.StringIO(game['pgn']))
                     game_duration = get_game_duration(pgn)
                     total_seconds += game_duration
                     total_games += 1
-                    print(f"Spent {game_duration} seconds playing this game at {get_game_start_time(pgn)}")
+                    time_between_games = None
+                    if last_game_end_time is not None:
+                        time_between_games = get_game_start_time(pgn) - last_game_end_time
+                        if time_between_games < timedelta(0):
+                            time_between_games = timedelta(0)
+                    print(f"Spent {game_duration} seconds playing this game at {get_game_start_time(pgn)}. {time_between_games} between last game.")
+                    last_game_end_time = get_game_end_time(pgn)
                 except Exception as e:
                     logger.error(e)
                     print(e)
